@@ -1,0 +1,628 @@
+    DWR(Direct Web Remoting)是一个WEB远程调用框架.利用这个框架可以让AJAX开发变得很简单.利用DWR可以在客户端利用JavaScript直接调用服务端的Java方法并返回值给JavaScript就好像直接本地客户端调用一样(DWR根据Java类来动态生成JavaScrip代码).它通过反射，将java翻译成javascript，然后利用回调机制，轻松实现了javascript调用Java代码。
+DWR主要特点：
+1，异步调用。除了支持从JavaScript到Java方法（浏览器到服务器）的异步调用之外，从DWR2.0开始，DWR开始支持从服务器到JavaScript的反转异步调用功能（ReversedAJAX）。
+2，与其他框架的依存度低，可简单与Spring，Struts，WebWork，JSF，Hibernate，Beehive，EJB3，Seasar2等框架集成。
+3，可测试性好
+4，多浏览器支持
+5，支持免dwr.xml配置annotation功能。
+6，成熟健壮，有丰富的帮助文档资料。
+
+DWR应用例子：
+其大概开发过程如下：
+1.编写业务代码，该代码是和dwr无关的。
+2.确认业务代码中哪些类、哪些方法是要由javascript直接访问的。
+3.编写dwr组件，对步骤2的方法进行封装。
+4.配置dwr组件到dwr.xml文件中，如果有必要，配置convert，进行java和javascript类型互转。
+5.通过反射机制，dwr将步骤4的类转换成javascript代码，提供给前台页面调用。
+5.编写网页，调用步骤5的javascript中的相关方法（间接调用服务器端的相关类的方法），执行业务逻辑，将执行结果利用回调函数返回。
+6.在回调函数中，得到执行结果后，可以继续编写业务逻辑的相关javascript代码。
+
+下面以用户注册的例子，来说明其使用。（注意，本次例子只是用于演示，说明DWR的使用，类设计并不是最优的）。
+
+1.先介绍下相关的Java类
+  
+
+  User: 用户类，
+
+ 
+
+  public class User {
+
+ 
+
+     //登陆ID，主键唯一
+
+ 
+
+     private String id;
+
+ 
+
+     //姓名
+
+ 
+
+     private String name;
+
+ 
+
+     //口令
+
+ 
+
+     private String password;
+
+ 
+
+     //电子邮件
+
+ 
+
+     private String email;
+
+ 
+
+     //以下包含getXXX和setXXX方法
+
+     .......
+
+ 
+
+  }
+
+  UserDAO：实现User的数据库访问，这里作为一个演示，编写测试代码
+
+  public class UserDAO {
+
+ 
+
+    //存放保存的数据
+
+ 
+
+    private static Map dataMap = new HashMap();
+
+ 
+
+ 
+
+ 
+
+    //持久用户
+
+ 
+
+    public boolean save(User user) {
+
+ 
+
+      if (dataMap.containsKey(user.getId()))
+
+ 
+
+        return false;
+
+ 
+
+      System.out.println("下面开始保存用户");
+
+ 
+
+      System.out.println("id："+user.getId());
+
+ 
+
+      System.out.println("password："+user.getPassword());
+
+ 
+
+      System.out.println("name："+user.getName());
+
+ 
+
+      System.out.println("email："+user.getEmail());
+
+ 
+
+      dataMap.put(user.getId(), user);
+
+ 
+
+      System.out.println("用户保存结束");
+
+ 
+
+      return true;
+
+ 
+
+    }
+
+ 
+
+ 
+
+ 
+
+    //查找用户
+
+ 
+
+    public User find(String id) {
+
+ 
+
+      return (User)dataMap.get(id);
+
+ 
+
+    }
+
+ 
+
+}
+
+  DWRUserAccess：DWR组件，提供给javascript访问的。
+
+public class DWRUserAccess {
+
+ 
+
+ 
+
+ 
+
+      UserDAO userDAO = new UserDAO();
+
+ 
+
+ 
+
+ 
+
+      public boolean save(User user) {
+
+ 
+
+        return userDAO.save(user);
+
+ 
+
+      }
+
+ 
+
+ 
+
+ 
+
+      public User find(String id) {
+
+ 
+
+        return userDAO.find(id);
+
+ 
+
+      }
+
+ 
+
+  }
+  下面说明下程序执行的流程
+
+  1.用户在页面上输入相关注册信息，id、name、password、email，点击“提交”按钮
+  2.javascript代码开始执行，根据用户填写相关信息，通过dwr提供的DWRUserAccess.js里save的方法，调用服务器端的DWRUserAccess类save方法，将注册信息保存。
+  3.通过DWRUserAccess.jsp里的find方法，调用服务器端DWRUserAccess类里的find方法，执行用户信息查找。
+
+  注意，在以上的执行过程中，DWRUserAccess是供DWR调用的，是DWR组件，因此需要将DWRUserAccess类配置到dwr中。
+
+  接下来讲解本次dwr测试环境的配置。
+
+  1.新建一个webapp，命名为testApp
+  2.将dwr.jar拷贝到testApp的WEB-INF的lib目录下
+  3.编译上面的User，UserDAO，DWRUserAccess类，放到classes目录下
+  4.在web.xml中配置servlet,适配路径到dwr目录下,如下所示  
+
+<servlet>
+
+ 
+
+    <servlet-name>dwr-invoker</servlet-name>
+
+ 
+
+    <display-name>DWR Servlet</display-name>
+
+ 
+
+    <description>Direct Web Remoter Servlet</description>
+
+ 
+
+    <servlet-class>uk.ltd.getahead.dwr.DWRServlet</servlet-class>
+
+ 
+
+    <init-param>
+
+ 
+
+      <param-name>debug</param-name>
+
+ 
+
+      <param-value>true</param-value>
+
+ 
+
+    </init-param>
+
+ 
+
+    <init-param>
+
+ 
+
+      <param-name>scriptCompressed</param-name>
+
+ 
+
+      <param-value>false</param-value>
+
+ 
+
+    </init-param>
+
+ 
+
+    <load-on-startup>1</load-on-startup>
+
+ 
+
+  </servlet>
+
+ 
+
+ 
+
+ 
+
+  <servlet-mapping>
+
+ 
+
+    <servlet-name>dwr-invoker</servlet-name>
+
+ 
+
+    <url-pattern>/dwr/*</url-pattern>
+
+ 
+
+  </servlet-mapping>
+
+ 
+  以上的配置可以拦截testApp下所有指向dwr的请求，关于这个拦截器，我们会在后面介绍。
+
+  5.WEB-INF下新建一个dwr.xml文件（和web.xml在同一个文件夹），内容如下：
+  
+
+ < xml version="1.0" encoding="UTF-8" >
+
+ 
+
+<!DOCTYPE dwr PUBLIC "-//GetAhead Limited//DTD Direct Web Remoting 1.0//EN"
+
+ "http://www.getahead.ltd.uk/dwr/dwr10.dtd">
+
+ 
+
+ 
+
+ 
+
+<dwr>
+
+ 
+
+  <allow>
+
+ 
+
+<create creator="new" javascript="DWRUserAccess">
+
+ 
+
+      <param name="class" value="test.DWRUserAccess"/>
+
+ 
+
+    </create>
+
+ 
+
+<convert converter="bean" match="test.User"/>
+
+ 
+
+  </allow>
+
+ 
+
+</dwr>
+
+  这里我们把DWRUserAccess配置到了dwr中，create元素中，creater="new"表示每调用一次DWRUserAccess时，需要new一个这样的类；javascript="DWRUserAccess"，表示提供给前台页面调用的javascirpt文件是DWRUserAccess.js。
+
+  convert元素用于数据类型转换，即java类和javascript之间相互转换，因为和前台交换的是User对象，因此需要对此使用bean转换，我们将在后面介绍这个类。
+
+  4.编写测试的HTML页面 test.html
+
+   <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+
+ 
+
+<HTML>
+
+ 
+
+<HEAD>
+
+ 
+
+<TITLE>DWR测试</TITLE>
+
+ 
+
+<meta http-equiv=Content-Type content="text/html; charset=gb2312">
+
+ 
+
+<script src="/oblog312/dwr/engine.js"></script>
+
+ 
+
+<script src="/oblog312/dwr/util.js"></script>
+
+ 
+
+<script src="/oblog312/dwr/interface/DWRUserAccess.js"></script>
+
+ 
+
+</HEAD>
+
+ 
+
+<BODY>
+
+ 
+
+<B>用户注册</B><br>
+
+ 
+
+------------------------------------------------
+
+ 
+
+<Br>
+
+ 
+
+<form name="regForm">
+
+ 
+
+登陆ID：<input type="text" name="id"><br>
+
+ 
+
+口  令：<input type="password" name="password"><br>
+
+ 
+
+姓  名：<input type="text" name="name"><br>
+
+ 
+
+电子邮件：<input type="text" name="email"><br>
+
+ 
+
+<input type="button" name="submitBtn" value="提交" onclick="OnSave()"><br>
+
+ 
+
+    </form>
+
+ 
+
+ 
+
+ 
+
+<br>
+
+ 
+
+<br><B>用户查询</B><br>
+
+ 
+
+------------------------------------------------
+
+ 
+
+<Br>
+
+ 
+
+<form name="queryForm">
+
+ 
+
+登陆ID：<input type="text" name="id"><br>
+
+ 
+
+<input type="button" name="submitBtn" value="提交" onclick="OnFind()"><br>
+
+ 
+
+</form>
+
+ 
+
+<br>
+
+ 
+
+</BODY>
+
+ 
+
+</HTML>
+
+ 
+
+<SCRIPT LANGUAGE="JavaScript">
+
+ 
+
+<!--
+
+ 
+
+function saveFun(data) {
+
+ 
+
+if (data) {
+
+ 
+
+  alert("注册成功！");
+
+ 
+
+} else {
+
+ 
+
+  alert("登陆ID已经存在！");
+
+ 
+
+}
+
+ 
+
+}
+
+ 
+
+ 
+
+ 
+
+function OnSave() {
+
+ 
+
+var userMap = {};
+
+ 
+
+userMap.id = regForm.id.value;
+
+ 
+
+userMap.password = regForm.password.value;
+
+ 
+
+userMap.name = regForm.name.value;
+
+ 
+
+userMap.email = regForm.email.value;
+
+ 
+
+DWRUserAccess.save(userMap, saveFun);
+
+ 
+
+}
+
+ 
+
+ 
+
+ 
+
+function findFun(data) {
+
+ 
+
+if (data == null) {
+
+ 
+
+  alert("无法找到用户："+queryForm.id.value);
+
+ 
+
+  return;
+
+ 
+
+}
+
+ 
+
+ 
+
+alert("找到用户，nid："+data.id+"，npassword："+data.password+"，nname："+data.name+"，nemail："+data.email);
+
+ 
+
+ 
+
+}
+
+ 
+
+ 
+
+ 
+
+function OnFind() {
+
+ 
+
+DWRUserAccess.find(queryForm.id.value, findFun);
+
+ 
+
+}
+
+ 
+
+//-->
+
+ 
+
+</SCRIPT>
+
+以下对页面的javascript进行解释
+
+<script src="/oblog312/dwr/engine.js"></script>
+<script src="/oblog312/dwr/util.js"></script>
+这两个是dwr提供的，用户可以不必关心，只需要导入即可
+
+<script src="/oblog312/dwr/interface/DWRUserAccess.js"></script>
+是我们编写的DWRUserAccess类，经dwr反射后，生成的javascript代码，它和DWRUserAccess.java是对应的，供用户调用，实际上我们就是通过这个js文件去调用服务器端的DWRUserAccess类的。
+其中例子要用到两个jar包：dwr.jar和commons-logging.jar
+原文链接：http://www.cnblogs.cn/jdbc/archive/2012/08/08/JA.html
